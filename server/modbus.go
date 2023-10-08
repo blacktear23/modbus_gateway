@@ -1,6 +1,9 @@
 package server
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+	"errors"
+)
 
 type pdu struct {
 	unitID   uint8
@@ -15,6 +18,10 @@ type mbap struct {
 }
 
 type Endianness uint
+
+var (
+	ErrNeedReadMore = errors.New("Need read more byte")
+)
 
 const (
 	// endianness of 16-bit registers
@@ -82,7 +89,10 @@ func calculateResponseBytes(responseCode uint8, responseLength uint8) (byteCount
 	case FCReadHoldingRegisters,
 		FCReadInputRegisters,
 		FCReadCoils,
-		FCReadDiscreteInputs:
+		FCReadDiscreteInputs,
+		FCReadFileRecord,
+		FCWriteFileRecord,
+		FCReadWriteMultipleRegisters:
 		byteCount = int(responseLength)
 	case FCWriteSingleRegister,
 		FCWriteMultipleRegisters,
@@ -99,8 +109,14 @@ func calculateResponseBytes(responseCode uint8, responseLength uint8) (byteCount
 		FCWriteMultipleRegisters | 0x80,
 		FCWriteSingleCoil | 0x80,
 		FCWriteMultipleCoils | 0x80,
-		FCMaskWriteRegister | 0x80:
+		FCMaskWriteRegister | 0x80,
+		FCReadFileRecord | 0x80,
+		FCWriteFileRecord | 0x80,
+		FCReadWriteMultipleRegisters | 0x80,
+		FCReadFifoQueue | 0x80:
 		byteCount = 0
+	case FCReadFifoQueue:
+		err = ErrNeedReadMore
 	default:
 		err = ErrProtocolError
 	}

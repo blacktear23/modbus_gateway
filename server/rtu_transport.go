@@ -123,9 +123,23 @@ func (st *serialTransport) readRTUFrame() (*pdu, error) {
 		return nil, err
 	}
 
+	startPos := 3
 	restBytes, err := calculateResponseBytes(uint8(buf[1]), uint8(buf[2]))
 	if err != nil {
-		return nil, err
+		if err == ErrNeedReadMore {
+			// Read one more byte
+			n, err := io.ReadFull(st.conn, buf[3:4])
+			if (n > 0 || err == nil) && n != 1 {
+				return nil, ErrShortFrame
+			}
+			if err != nil && err != io.ErrUnexpectedEOF {
+				return nil, err
+			}
+			restBytes = int(bytesToUint16(BIG_ENDIAN, buf[2:4]))
+			startPos++
+		} else {
+			return nil, err
+		}
 	}
 	// Add for CRC
 	restBytes += 2
@@ -134,7 +148,7 @@ func (st *serialTransport) readRTUFrame() (*pdu, error) {
 		return nil, ErrProtocolError
 	}
 
-	n, err = io.ReadFull(st.conn, buf[3:3+restBytes])
+	n, err = io.ReadFull(st.conn, buf[startPos:startPos+restBytes])
 	if err != nil && err != io.ErrUnexpectedEOF {
 		return nil, err
 	}
@@ -145,14 +159,14 @@ func (st *serialTransport) readRTUFrame() (*pdu, error) {
 
 	var crc crc
 	crc.init()
-	crc.add(buf[0 : 3+restBytes-2])
-	if !crc.isEqual(buf[3+restBytes-2], buf[3+restBytes-1]) {
+	crc.add(buf[0 : startPos+restBytes-2])
+	if !crc.isEqual(buf[startPos+restBytes-2], buf[startPos+restBytes-1]) {
 		return nil, ErrBadCRC
 	}
 	resp := &pdu{
 		unitID:   buf[0],
 		funcCode: buf[1],
-		payload:  buf[2 : 3+restBytes-2],
+		payload:  buf[2 : startPos+restBytes-2],
 	}
 	return resp, nil
 }
