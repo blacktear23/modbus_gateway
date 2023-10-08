@@ -26,6 +26,9 @@ func (u *UnitMap) Validate() error {
 	if u.UnitID < 1 || u.UnitID > 255 {
 		return ErrInvalidUnitID
 	}
+	if u.TargetUnitID == 0 {
+		u.TargetUnitID = 1
+	}
 	if u.TargetUnitID < 1 || u.TargetUnitID > 255 {
 		return ErrInvalidUnitID
 	}
@@ -33,14 +36,15 @@ func (u *UnitMap) Validate() error {
 }
 
 type Backend struct {
-	Name     string `yaml:"name"`
-	Protocol string `yaml:"protocol"`
-	Address  string `yaml:"address"`
-	Baudrate int    `yaml:"baudrate"`
-	Databits int    `yaml:"databits"`
-	Stopbits int    `yaml:"stopbits"`
-	Parity   string `yaml:"parity"`
-	Timeout  int    `yaml:"timeout"`
+	Name      string `yaml:"name"`
+	Protocol  string `yaml:"protocol"`
+	Address   string `yaml:"address"`
+	Baudrate  int    `yaml:"baudrate"`
+	Databits  int    `yaml:"databits"`
+	Stopbits  int    `yaml:"stopbits"`
+	Parity    string `yaml:"parity"`
+	Timeout   int    `yaml:"timeout"`
+	TlsVerify bool   `yaml:"tls_verify"`
 }
 
 func (b *Backend) FillDefaults() {
@@ -82,7 +86,7 @@ func (b *Backend) Validate() error {
 		return ErrRequireBackendAddress
 	}
 	switch b.Protocol {
-	case "tcp", "serial":
+	case "serial", "tcp", "tls":
 	default:
 		return fmt.Errorf("Invalid protocol %s", b.Protocol)
 	}
@@ -139,21 +143,21 @@ func (c *Config) Reload() error {
 	}
 
 	backendByName := map[string]*Backend{}
-
 	for _, b := range nc.Backends {
 		if err = b.Validate(); err != nil {
 			return err
 		}
 		name := b.Name
+		// Check for duplicate backend name
 		if _, have := backendByName[name]; have {
 			return fmt.Errorf("Backend name %s is duplicate", name)
 		} else {
 			backendByName[name] = b
 		}
 	}
+
 	uidToBackend := map[uint8]*Backend{}
 	uidToUMap := map[uint8]*UnitMap{}
-
 	for _, um := range nc.UnitMaps {
 		if err = um.Validate(); err != nil {
 			return err
@@ -164,6 +168,10 @@ func (c *Config) Reload() error {
 			return fmt.Errorf("Cannot find backend %s", bname)
 		}
 		uid := uint8(um.UnitID)
+		// Check for duplicate unit ID
+		if _, have := uidToBackend[uid]; have {
+			return fmt.Errorf("Unit Map got duplicate Unit ID: %d", uid)
+		}
 		uidToBackend[uid] = backend
 		uidToUMap[uid] = um
 	}

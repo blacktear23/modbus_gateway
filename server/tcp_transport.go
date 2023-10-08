@@ -1,6 +1,7 @@
 package server
 
 import (
+	"crypto/tls"
 	"errors"
 	"io"
 	"log"
@@ -18,7 +19,7 @@ var (
 
 type tcpTransport struct {
 	cfg     *config.Backend
-	conn    *net.TCPConn
+	conn    net.Conn
 	timeout time.Duration
 	lock    sync.RWMutex
 	lastTxn uint16
@@ -42,7 +43,7 @@ func (tt *tcpTransport) ensureConn() error {
 	if err != nil {
 		return err
 	}
-	conn, err := net.DialTCP("tcp", nil, addr)
+	conn, err := tt.dial(addr)
 	if err != nil {
 		return err
 	}
@@ -54,6 +55,43 @@ func (tt *tcpTransport) ensureConn() error {
 	}
 	tt.lock.Unlock()
 	return nil
+}
+
+func (tt *tcpTransport) dial(addr *net.TCPAddr) (net.Conn, error) {
+	switch tt.cfg.Protocol {
+	case "tcp":
+		return tt.dialTcp(addr)
+	case "tls":
+		return tt.dialTls(addr)
+	}
+	return nil, ErrInvalidProtocol
+}
+
+func (tt *tcpTransport) dialTcp(addr *net.TCPAddr) (net.Conn, error) {
+	if tt.timeout > 0 {
+		return net.DialTimeout("tcp", addr.String(), tt.timeout)
+	}
+	return net.Dial("tcp", addr.String())
+}
+
+func (tt *tcpTransport) dialTls(addr *net.TCPAddr) (net.Conn, error) {
+	conf := &tls.Config{
+		InsecureSkipVerify: tt.cfg.TlsVerify,
+	}
+	dialer := &net.Dialer{}
+	if tt.timeout > 0 {
+		dialer.Deadline = time.Now().Add(tt.timeout)
+	}
+	conn, err := tls.DialWithDialer(dialer, "tcp", addr.String(), conf)
+	if err != nil {
+		return nil, err
+	}
+	err = conn.Handshake()
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+	return conn, err
 }
 
 func (tt *tcpTransport) cleanErrorConn() {
@@ -74,6 +112,7 @@ func (tt *tcpTransport) ExecuteRequest(req *pdu) (*pdu, error) {
 	if err != nil && err == errNeedRetry {
 		// Retry time
 		tt.cleanErrorConn()
+		log.Println("Rery connect backend", tt.cfg.Name)
 		if err := tt.ensureConn(); err != nil {
 			log.Println("Connect backend got error:", err)
 			return modbusErrorPdu(req, MErrGWTargetFailedToRespond), nil
@@ -90,6 +129,19 @@ func (tt *tcpTransport) ExecuteRequest(req *pdu) (*pdu, error) {
 	return resp, err
 }
 
+func isErrorNeedRetry(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, syscall.ECONNRESET) {
+		return true
+	}
+	if errors.Is(err, io.EOF) {
+		return true
+	}
+	return false
+}
+
 func (tt *tcpTransport) executeRequestTCP(req *pdu) (*pdu, error) {
 	var err error
 	if tt.timeout > 0 {
@@ -103,11 +155,11 @@ func (tt *tcpTransport) executeRequestTCP(req *pdu) (*pdu, error) {
 	}
 	tt.lastTxn++
 	_, err = tt.conn.Write(tt.encodeMBAPFrame(tt.lastTxn, req))
-	if err != nil && errors.Is(err, syscall.ECONNRESET) {
+	if err != nil && isErrorNeedRetry(err) {
 		return nil, errNeedRetry
 	}
 	resp, err := tt.readResponse()
-	if err != nil && errors.Is(err, syscall.ECONNRESET) {
+	if err != nil && isErrorNeedRetry(err) {
 		return nil, errNeedRetry
 	}
 	return resp, err

@@ -14,7 +14,7 @@ var (
 
 func newTransport(cfg *config.Backend) Transport {
 	switch cfg.Protocol {
-	case "tcp":
+	case "tcp", "tls":
 		return newTcpTransport(cfg)
 	case "serial":
 		return newSerialTransport(cfg)
