@@ -1,0 +1,14 @@
+[Unit]
+Description=modbus_gateway service
+After=syslog.target network.target remote-fs.target nss-lookup.target
+
+[Service]
+LimitNOFILE=1000000
+User=root
+ExecStart=/opt/modbus_gateway/modbus_gateway -c /opt/modbus_gateway/config.yaml
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=15s
+
+[Install]
+WantedBy=multi-user.target

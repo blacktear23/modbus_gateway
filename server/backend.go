@@ -23,6 +23,7 @@ type modbusResponse struct {
 }
 
 type Backend struct {
+	Name    string
 	bcfg    *config.Backend
 	trans   Transport
 	running bool
@@ -31,17 +32,22 @@ type Backend struct {
 
 func NewBackend(cfg *config.Backend) *Backend {
 	return &Backend{
+		Name:  cfg.Name,
 		bcfg:  cfg,
 		trans: newTransport(cfg),
 		ch:    make(chan *modbusRequest, 1),
 	}
 }
 
+func (b *Backend) GetBackendKey() string {
+	return b.bcfg.GetBackendKey()
+}
+
 func (b *Backend) Stop() error {
 	b.running = false
 	close(b.ch)
 	err := b.trans.Close()
-	log.Printf("Stop backend %s", b.bcfg.Name)
+	log.Printf("Stop backend %s", b.Name)
 	return err
 }
 
@@ -51,7 +57,7 @@ func (b *Backend) Start() {
 }
 
 func (b *Backend) start() {
-	log.Printf("Start running backend %s", b.bcfg.Name)
+	log.Printf("Start running backend %s", b.Name)
 	for req := range b.ch {
 		respPdu, err := b.trans.ExecuteRequest(req.req)
 		mresp := &modbusResponse{

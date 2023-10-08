@@ -83,11 +83,18 @@ func (r *Router) createNewBackend(name string) *Backend {
 func (r *Router) Reload() {
 	r.lock.Lock()
 	defer r.lock.Unlock()
+	newBackends := map[string]*Backend{}
+
 	for _, b := range r.backends {
+		cb := r.cfg.GetBackendByName(b.Name)
+		if cb != nil && cb.GetBackendKey() == b.GetBackendKey() {
+			newBackends[b.Name] = b
+			continue
+		}
 		err := b.Stop()
 		if err != nil {
-			log.Printf("Close backend %s got error: %v", b.bcfg.Name, err)
+			log.Printf("Close backend %s got error: %v", b.Name, err)
 		}
 	}
-	r.backends = map[string]*Backend{}
+	r.backends = newBackends
 }
