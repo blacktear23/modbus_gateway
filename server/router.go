@@ -14,9 +14,18 @@ type Router struct {
 }
 
 func NewRouter(cfg *config.Config) *Router {
-	return &Router{
+	ret := &Router{
 		cfg:      cfg,
 		backends: map[string]*Backend{},
+	}
+	ret.init()
+	return ret
+}
+
+func (r *Router) init() {
+	// Pre create backends
+	for _, b := range r.cfg.GetBackends() {
+		r.createNewBackend(b.Name)
 	}
 }
 
@@ -97,4 +106,13 @@ func (r *Router) Reload() {
 		}
 	}
 	r.backends = newBackends
+}
+
+func (r *Router) Stop() {
+	for _, b := range r.backends {
+		err := b.Stop()
+		if err != nil {
+			log.Printf("Close backend %s got error: %v", b.Name, err)
+		}
+	}
 }

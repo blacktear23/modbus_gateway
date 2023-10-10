@@ -59,7 +59,9 @@ func (s *TCPServer) runListen() {
 	for s.running {
 		conn, err := s.ln.Accept()
 		if err != nil {
-			log.Printf("Accept Error: %v", err)
+			if s.running {
+				log.Printf("Accept Error: %v", err)
+			}
 			continue
 		}
 		go s.handleConn(conn)

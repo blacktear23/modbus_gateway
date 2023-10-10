@@ -65,6 +65,9 @@ backends:
     # Verify server's certificate, default false, only available when protocol is `tls`
     # tls_verify: false
 
+    # How many connections to backend server, default is 1 only affected for `tcp` and `tls`
+    # connections: 1
+
   - name: Backend-2
     protocol: tcp
     address: 127.0.0.1:1502

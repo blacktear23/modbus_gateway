@@ -36,20 +36,24 @@ func (u *UnitMap) Validate() error {
 }
 
 type Backend struct {
-	Name      string `yaml:"name"`
-	Protocol  string `yaml:"protocol"`
-	Address   string `yaml:"address"`
-	Baudrate  int    `yaml:"baudrate"`
-	Databits  int    `yaml:"databits"`
-	Stopbits  int    `yaml:"stopbits"`
-	Parity    string `yaml:"parity"`
-	Timeout   int    `yaml:"timeout"`
-	TlsVerify bool   `yaml:"tls_verify"`
+	Name        string `yaml:"name"`
+	Protocol    string `yaml:"protocol"`
+	Address     string `yaml:"address"`
+	Baudrate    int    `yaml:"baudrate"`
+	Databits    int    `yaml:"databits"`
+	Stopbits    int    `yaml:"stopbits"`
+	Parity      string `yaml:"parity"`
+	Timeout     int    `yaml:"timeout"`
+	TlsVerify   bool   `yaml:"tls_verify"`
+	Connections int    `yaml:"connections"`
 }
 
 func (b *Backend) FillDefaults() {
 	if b.Protocol == "serial" {
 		b.fillSerialDefaults()
+	}
+	if b.Connections == 0 {
+		b.Connections = 1
 	}
 }
 
@@ -101,7 +105,13 @@ func (b *Backend) Validate() error {
 
 func (b *Backend) validateTcp() error {
 	_, err := net.ResolveTCPAddr("tcp", b.Address)
-	return err
+	if err != nil {
+		return err
+	}
+	if b.Connections < 1 {
+		return fmt.Errorf("Invalid connections: %d", b.Connections)
+	}
+	return nil
 }
 
 func (b *Backend) validateSerial() error {

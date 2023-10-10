@@ -22,6 +22,19 @@ func newTransport(cfg *config.Backend) Transport {
 	return nil
 }
 
+func newTransports(cfg *config.Backend) []Transport {
+	// Make sure serial not affected by connections parameter
+	conns := cfg.Connections
+	if cfg.Protocol == "serial" {
+		conns = 1
+	}
+	ret := make([]Transport, conns)
+	for i := 0; i < conns; i++ {
+		ret[i] = newTransport(cfg)
+	}
+	return ret
+}
+
 func modbusErrorPdu(req *pdu, errCode uint8) *pdu {
 	return &pdu{
 		unitID:   req.unitID,

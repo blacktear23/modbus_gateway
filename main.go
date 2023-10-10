@@ -33,6 +33,8 @@ func main() {
 		version    bool
 	)
 
+	log.SetOutput(os.Stdout)
+
 	flag.StringVar(&listenAddr, "l", ":502", "Modbus TCP server listen address")
 	flag.StringVar(&configFile, "c", "config.yaml", "Config file name")
 	flag.IntVar(&timeout, "t", 0, "Timeout unit is ms")
@@ -70,7 +72,10 @@ func main() {
 			return
 		}
 		router.Reload()
-	}, nil)
+	}, func() {
+		router.Stop()
+		server.Stop()
+	})
 }
 
 type SignalCallback func()
